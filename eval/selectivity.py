@@ -713,6 +713,37 @@ def render_markdown(report: SelectivityReport) -> str:
         f"with 1/density; the `post_filter_x10` row is what that patch is worth."
     )
     lines.append("")
+    # The 1% row spelled out in prose as well as in the table. It is the row the
+    # README's argument turns on, and a number somebody has to find in a
+    # twenty-row table is a number nobody quotes.
+    one_percent = next((d for d in report.results if abs(d.density - 0.01) < 1e-9), None)
+    if one_percent is not None:
+        post = one_percent.arm("post_filter")
+        post10 = one_percent.arm("post_filter_x10")
+        tokens = one_percent.arm("grant_tokens")
+        lines.append(
+            f"At 1% visibility ({one_percent.visible_docs:,} of {report.n_docs:,} "
+            f"documents) recall@{report.k} is **{post.recall_at_10:.3f}** for "
+            f"`post_filter`, {post10.recall_at_10:.3f} with 10x overfetch, and "
+            f"{tokens.recall_at_10:.3f} for `grant_tokens`. The cost runs the "
+            f"other way: post-filtering scored "
+            f"{post.distance_computations:,} vectors at {post.p50_ms:.2f} ms p50 / "
+            f"{post.p95_ms:.2f} ms p95, grant-token filtering "
+            f"{tokens.distance_computations:,} at {tokens.p50_ms:.2f} ms p50 / "
+            f"{tokens.p95_ms:.2f} ms p95. Filtering inside the index is both more "
+            f"accurate and cheaper here; there is no trade being made."
+        )
+        lines.append("")
+    lines.append(
+        f"Correctly-filtered arms are held to a recall **floor** of "
+        f"{report.recall_floor:.2f}, never to an equality — "
+        f"{'held' if report.floor_holds else '**MISSED**'} on this run. HNSW is "
+        f"approximate, so `filtered top-k == exact top-k` is true only when a "
+        f"query routes to brute force, and asserting it anywhere else is a test "
+        f"that will eventually lie. The post-filter arms are excluded from the "
+        f"floor because their collapse is the finding, not a regression."
+    )
+    lines.append("")
     for warning in report.warnings:
         lines.append(f"> Caveat: {warning}")
         lines.append("")

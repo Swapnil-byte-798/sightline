@@ -267,7 +267,7 @@ class PgVectorStore:
         if not chunks:
             return
         rows = []
-        for chunk, vec in zip(chunks, vectors):
+        for chunk, vec in zip(chunks, vectors, strict=True):
             normalised = normalise(vec, self._dim)
             rows.append(
                 (

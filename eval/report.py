@@ -8,11 +8,14 @@ Everything between the ``sightline:begin`` and ``sightline:end`` markers is
 generated. Editing it by hand is not forbidden; it is simply undone by the next
 run, and ``--check`` fails the build in the meantime.
 
-    python -m eval.report            # run everything, rewrite the managed blocks
+    python -m eval.report            # run everything, print the blocks, touch nothing
+    python -m eval.report --write    # run everything, rewrite the managed blocks
     python -m eval.report --check    # run everything, compare, exit non-zero on drift
 
-CI runs ``--check``. A drifting number is a failing build, not a stale document
-(FR-25).
+``make headline`` is the first, ``make readme-check`` the second. CI runs
+``--check``. A drifting number is a failing build, not a stale document (FR-25).
+Writing is opt-in because rewriting somebody's README is a side effect, and a
+tool whose bare invocation has one is a tool that eventually runs by accident.
 
 WHAT IS GATED AND WHAT IS NOT
 -----------------------------
@@ -138,11 +141,19 @@ GATES: tuple[Gate, ...] = (
     Gate("mutation.kill_rate", 0.0, "the headline metric."),
     Gate("attack.leaks", 0.0, "the only acceptable value is 0."),
     Gate("attack.passed", 0.0, "an attack that stops passing is a regression, not noise."),
+    Gate("attack.total", 0.0, "a deleted attack is a deleted claim, and must be noticed."),
     Gate("attack.false_allow", 0.0, "a plan admitting what check() denies is a breach."),
     Gate("reindex.*", 0.0, "vector writes per membership change. Expected exactly 0 (ADR 0002)."),
+    Gate("selectivity.docs", 0.0, "corpus shape. A different corpus is a different measurement."),
+    Gate("selectivity.queries", 0.0, "corpus shape, same reasoning."),
+    Gate("selectivity.recall_floor", 0.0, "FR-14's floor. Lowering it is a decision, not a drift."),
     Gate("selectivity.cost.*", 0.0, "distance computations are deterministic given the seed."),
     Gate("selectivity.recall.*", 0.02, "the drift tolerance published in docs/FRD.md 8.3."),
     Gate("selectivity.returned.*", 0.02, "mean results returned; same tolerance as recall."),
+    Gate(
+        "selectivity.worst_post_filter_recall", 0.02,
+        "the headline collapse. Same tolerance as every other recall figure.",
+    ),
 )
 
 #: Prefix for numbers written into the README but deliberately not gated.
@@ -328,6 +339,7 @@ def metrics(results: Results) -> dict[str, float]:
         out["mutation.scored"] = len(results.mutation.scored)
         out["mutation.kill_rate"] = round(results.mutation.kill_rate, 4)
 
+    out["attack.total"] = len(results.attack.results)
     out["attack.leaks"] = results.attack.leaks
     out["attack.passed"] = len(results.attack.results) - len(results.attack.failures) - len(
         results.attack.skipped
@@ -345,6 +357,13 @@ def metrics(results: Results) -> dict[str, float]:
         results.reindex.documents_retokenised_on_acl_change
     )
 
+    out["selectivity.docs"] = results.selectivity.n_docs
+    out["selectivity.queries"] = results.selectivity.n_queries
+    out["selectivity.recall_floor"] = results.selectivity.recall_floor
+    out["selectivity.worst_post_filter_recall"] = round(
+        results.selectivity.worst_post_filter_recall, 4
+    )
+
     for density in results.selectivity.results:
         dk = _density_key(density.density)
         for arm in density.arms:
@@ -353,6 +372,7 @@ def metrics(results: Results) -> dict[str, float]:
             out[f"selectivity.cost.{dk}.{arm.arm}"] = arm.distance_computations
             # Latency is written, marked, and not gated. See the module docstring.
             out[f"{UNGATED_PREFIX}selectivity.p50_ms.{dk}.{arm.arm}"] = round(arm.p50_ms, 3)
+            out[f"{UNGATED_PREFIX}selectivity.p95_ms.{dk}.{arm.arm}"] = round(arm.p95_ms, 3)
     return out
 
 
@@ -382,11 +402,27 @@ def _render_headline(results: Results) -> str:
     )
     lines.append("")
     if results.mutation is not None and not results.mutation.aborted:
-        killed, scored = len(results.mutation.killed), len(results.mutation.scored)
-        lines.append(
-            f"* **Mutation kill rate: {killed}/{scored}** "
-            f"({results.mutation.kill_rate:.0%}) against 15 pre-registered permission bugs."
+        mutation = results.mutation
+        killed, scored = len(mutation.killed), len(mutation.scored)
+        # The denominator is the mutants that ran, not the pre-registered total.
+        # If they differ, say so in the same sentence rather than in a footnote:
+        # a kill rate over a shrunken denominator is a different number.
+        applied = (
+            f"{len(mutation.results)} pre-registered permission bugs"
+            if scored == len(mutation.results)
+            else (
+                f"{scored} of {len(mutation.results)} pre-registered permission bugs "
+                f"({len(mutation.unscorable)} could not be applied or errored, and "
+                f"are excluded from the denominator)"
+            )
         )
+        lines.append(f"* **Mutation kill rate: {killed}/{scored}** ({mutation.kill_rate:.0%}) against {applied}.")
+        if mutation.survivors:
+            named = ", ".join(r.id for r in mutation.survivors)
+            lines.append(
+                f"  Survivors, named rather than rounded away: {named}. "
+                f"Each one is a behaviour the suite does not cover."
+            )
     else:
         lines.append(
             "* **Mutation kill rate: not measured in this run.** The harness was "
@@ -427,8 +463,9 @@ def _render_provenance(results: Results, payload: dict[str, float]) -> str:
     )
     lines.append("")
     lines.append(
-        f"Corpus seed {selectivity.seed}, {selectivity.n_docs:,} documents, "
-        f"{selectivity.n_queries} queries, embedder `{selectivity.embedder}`."
+        f"Corpus seed `{selectivity.seed}`, {selectivity.n_docs:,} documents, "
+        f"{selectivity.n_queries} queries, embedder `{selectivity.embedder}` "
+        f"(semantic: `{str(selectivity.semantic).lower()}`)."
     )
     if not selectivity.semantic:
         lines.append("")
@@ -610,7 +647,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="python -m eval.report",
         description="Generate every published number, write it into the README, or check it.",
     )
-    parser.add_argument(
+    # --write is explicit rather than implied. Rewriting somebody's README is a
+    # side effect, and a tool whose default invocation has one is a tool that
+    # eventually runs by accident. With neither flag the blocks are printed and
+    # nothing is touched.
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--write", action="store_true",
+        help="rewrite the managed blocks in the README",
+    )
+    mode.add_argument(
         "--check", action="store_true",
         help="do not write; exit non-zero if a committed number no longer matches",
     )
@@ -678,8 +724,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 1
 
-    changed = write_readme(results, path=args.readme)
-    print(f"{args.readme}: {'updated' if changed else 'already up to date'}")
+    if args.write:
+        changed = write_readme(results, path=args.readme)
+        print(f"{args.readme}: {'updated' if changed else 'already up to date'}")
+        return 0
+
+    # Dry run. Print what would be written and touch nothing.
+    rendered = render_blocks(results)
+    for name in BLOCKS:
+        print(rendered[name])
+        print()
+    print(
+        f"(dry run: nothing was written. Pass --write to update {args.readme}, "
+        f"or --check to fail on drift.)",
+        file=sys.stderr,
+    )
     return 0
 
 

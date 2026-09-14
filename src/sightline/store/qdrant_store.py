@@ -223,7 +223,7 @@ class QdrantVectorStore:
             self.ensure_collection(self._dim)
 
         points = []
-        for chunk, vec in zip(chunks, prepared):
+        for chunk, vec in zip(chunks, prepared, strict=True):
             points.append(
                 models.PointStruct(
                     id=point_id_for(chunk.id),

@@ -47,9 +47,6 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = [
     "E501",   # line length; the formatter owns wrapping
     # Two real follow-ups, parked rather than rushed, so the build stays honest:
-    "B905",   # zip() without strict=. Worth fixing: upsert(chunks, vectors) with
-              # mismatched lengths would silently truncate rather than raise, and
-              # that is a data-corruption bug wearing a style warning's clothes.
     "UP042",  # str+Enum could be StrEnum on 3.11+. Cosmetic, but it changes how
               # members serialise, so it needs a test pass before flipping.
     "B007",   # unused loop variable

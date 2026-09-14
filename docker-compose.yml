@@ -24,10 +24,10 @@ services:
   api:
     build:
       context: .
-      # The default build installs no optional extras; the stack needs the two
-      # client libraries, so ask for them here.
+      # The image defaults to the serving extras only. This stack also talks to
+      # Postgres, so ask for that client too.
       args:
-        EXTRAS: ".[qdrant,postgres]"
+        EXTRAS: ".[qdrant,postgres,obs]"
     ports:
       - "127.0.0.1:8000:8000"
     environment:

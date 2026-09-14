@@ -333,7 +333,7 @@ class Histogram(Metric):
             sums = dict(self._sums)
         for key, counts in snapshot:
             base = list(key.values)
-            for edge, count in zip(self.buckets, counts):
+            for edge, count in zip(self.buckets, counts, strict=False):  # counts has an overflow bucket
                 labels = _Key(tuple(base + [("le", f"{edge:g}")]))
                 out.append(f"{self.name}_bucket{labels.render()} {count}")
             inf = _Key(tuple(base + [("le", "+Inf")]))

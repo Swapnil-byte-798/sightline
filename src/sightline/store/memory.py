@@ -258,7 +258,7 @@ class MemoryVectorStore:
                 raise ValueError(f"vector has dim {vec.shape[0]}, store holds dim {self._dim}")
 
         self._ensure_capacity(self._n + len(chunks))
-        for chunk, vec in zip(chunks, prepared):
+        for chunk, vec in zip(chunks, prepared, strict=True):
             row = self._row_of.get(chunk.id)
             if row is None:
                 row = self._n

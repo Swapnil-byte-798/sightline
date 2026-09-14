@@ -24,13 +24,16 @@ to leak, and they fail independently.
 
 WHAT THESE ATTACKS DO NOT CLAIM
 -------------------------------
-* **The injection scanner is not a control.** It is a pattern matcher, it is
-  described as one everywhere it appears, and translating the instruction into
-  Polish walks past it. :func:`injection_cannot_widen_the_filter` is the attack
-  that matters: it runs an injection that *succeeds completely* — the scanner is
-  bypassed by construction — and asserts that a model doing exactly what the
-  attacker asked still cannot reach a document outside the compiled plan. The
-  scanner is a speed bump in front of a wall; this suite measures the wall.
+* **The injection scanner is not a control.** It is a list of regexes over
+  English phrasings, it is described as a pattern matcher everywhere it appears,
+  and :func:`injection_cannot_widen_the_filter` walks past it by writing the
+  same instruction in French. That attack is the one that matters: the scanner
+  loses, the model runs, the model does exactly what the attacker asked — and
+  the forbidden document is still not in the prompt, because the plan was
+  compiled before the question was read. The scanner is a speed bump in front of
+  a wall; this suite measures the wall. Adding French to the regex list would
+  make the attack vacuous without making the system safer, which is why it has
+  not been added.
 * **The timing channel is narrowed, not closed.** :func:`enumeration_by_timing`
   reports the measured difference between the two empty-handed refusals against
   the harness's own noise floor, and it passes when the signal is below the

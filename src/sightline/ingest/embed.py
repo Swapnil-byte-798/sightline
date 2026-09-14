@@ -179,7 +179,7 @@ class HashEmbedder:
     def _units(self, text: str) -> Iterator[str]:
         words = _TOKEN_SPLIT_RE.findall(text.lower())
         yield from words
-        for a, b in zip(words, words[1:]):
+        for a, b in zip(words, words[1:], strict=False):  # bigrams: ragged by design
             yield f"{a}_{b}"
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:
@@ -617,7 +617,7 @@ def embed_all(
 
     pending: list[int] = []
     n_cached = 0
-    for u, (text, key) in enumerate(zip(uniq_texts, keys)):
+    for u, (text, key) in enumerate(zip(uniq_texts, keys, strict=True)):
         vec = hits.get(key)
         if vec is None:
             pending.append(u)
@@ -641,13 +641,13 @@ def embed_all(
                 f"{embedder.name}.encode returned {vectors.shape}, "
                 f"expected {(len(batch), dim)}"
             )
-        for u, text, vec in zip(batch_idx, batch, vectors):
+        for u, text, vec in zip(batch_idx, batch, vectors, strict=True):
             for i in unique[text]:
                 out[i] = vec
             n_chars += len(text)
             n_computed += 1
         if cache is not None:
-            cache.put_many([(keys[u], v) for u, v in zip(batch_idx, vectors)])
+            cache.put_many([(keys[u], v) for u, v in zip(batch_idx, vectors, strict=True)])
         done += len(batch)
         if progress is not None:
             progress(done, len(pending))

@@ -174,7 +174,7 @@ class FaissOracleStore:
             return self._mem.search(query_vector, plan, k)
 
         hits: list[UncheckedHit] = []
-        for score, row in zip(scores[0].tolist(), ids[0].tolist()):
+        for score, row in zip(scores[0].tolist(), ids[0].tolist(), strict=True):
             if row < 0:  # FAISS pads with -1 when fewer than `limit` are selected.
                 continue
             chunk_id, object_ref, text, tokens = self._mem.row_info(int(row))
