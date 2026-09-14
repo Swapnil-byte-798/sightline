@@ -416,7 +416,7 @@ class Retriever:
         """
         rid = request_id or uuid.uuid4().hex[:16]
         started = time.perf_counter()
-        k = self._validate(question, k, self.settings.retrieval.default_max_context_chars)
+        k = self.validate_request(question, k, self.settings.retrieval.default_max_context_chars)
 
         with obs.span("v1.search", **{"request.id": rid}) as sp:
             plan, cache, live, plan_ms = self._plan_stage(principal, sp)
@@ -511,7 +511,7 @@ class Retriever:
         rid = request_id or uuid.uuid4().hex[:16]
         started = time.perf_counter()
         max_chars = max_context_chars or self.settings.retrieval.default_max_context_chars
-        k = self._validate(question, k, max_chars)
+        k = self.validate_request(question, k, max_chars)
 
         with obs.span("v1.ask", **{"request.id": rid}) as sp:
             yield PipelineEvent("accepted", {"request_id": rid, "k": k})
@@ -768,12 +768,17 @@ class Retriever:
         return np.asarray(matrix, dtype=np.float32)[0]
 
     # -- helpers -----------------------------------------------------------
-    def _validate(self, question: str, k: int | None, max_chars: int) -> int:
+    def validate_request(self, question: str, k: int | None, max_chars: int) -> int:
         """Caps, checked before any work. Over budget refuses; it never trims.
 
         Trimming to fit would mean serving a request with fewer permission checks
         than it needed, which is the failure mode this whole system is about
         (SR-7).
+
+        Public because the streaming endpoint has to run it *before* the
+        response starts: once the first byte of a 200 is on the wire, a 429 is
+        no longer expressible, and an error the client can only discover by
+        parsing a truncated stream is not an error anybody handles.
         """
         cfg = self.settings.retrieval
         if not question or not question.strip():

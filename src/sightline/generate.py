@@ -58,7 +58,6 @@ import httpx
 from sightline.audit import redact_for_egress
 from sightline.errors import (
     AllProvidersFailed,
-    CircuitOpen,
     ProviderBudgetExhausted,
     ProviderError,
     ProviderTimeout,
