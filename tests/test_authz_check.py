@@ -9,12 +9,12 @@ purpose — "roughly the right depth" is not a security bound.
 from __future__ import annotations
 
 import time
+from itertools import pairwise
 
 import pytest
+from _world import WORLD_EXPECTATIONS
 
 from sightline.types import Decision, ObjectRef, PrincipalRef, Tuple_
-
-from _world import WORLD_EXPECTATIONS
 
 authz = pytest.importorskip("sightline.authz", reason="sightline.authz is not present yet")
 
@@ -236,7 +236,7 @@ def test_derivation_is_a_connected_chain(world):
     """Consecutive edges join: each tuple's principal is the next tuple's object."""
     why = _check(world, "user:alice", "doc:handbook").why
     edges = [Tuple_.parse(e) for e in why]
-    for upper, lower in zip(edges, edges[1:]):
+    for upper, lower in pairwise(edges):
         assert upper.principal.namespace == lower.object.namespace
         assert upper.principal.id == lower.object.id
         assert upper.principal.relation == lower.relation

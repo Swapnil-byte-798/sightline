@@ -1,11 +1,49 @@
+# Environments and build output
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
+
+# Tool caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Generated docs
 docs/build/guide.html
+
+# Corpora, indexes, models, audit logs. Nothing in here is small and nothing in
+# here is reproducible from the repository alone — `make ingest` rebuilds it.
 data/
+models/
+*.onnx
+*.jsonl
+*.sqlite
+*.sqlite3
+tuples.db
+
+# Evaluation output. The *numbers* live in README.md, written there by
+# `make headline` and checked by CI; the raw runs are artefacts.
+mutation.json
+eval_output/
+*.eval.json
+
+# Secrets. SIGHTLINE_GRANT_KEY and SIGHTLINE_AUDIT_HMAC_KEY belong here and
+# nowhere else in the tree.
 .env
+.env.*
+!.env.example
+
+# Editors and platforms
 .DS_Store
+.idea/
+.vscode/
+*.swp

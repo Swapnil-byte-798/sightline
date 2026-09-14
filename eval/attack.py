@@ -1,4 +1,4 @@
-"""The leak suite: ten attacks against a live pipeline, mapped to OWASP LLM Top 10.
+"""The leak suite: eleven attacks against a live pipeline, mapped to OWASP LLM Top 10.
 
 Everything else in this repository argues that Sightline cannot leak. This file
 tries to make it leak, end to end, through the real
@@ -7,7 +7,7 @@ real vector index, real recheck, real guardrails. Nothing is stubbed except the
 language model, and only because a network call is not part of any of these
 threat models.
 
-Each attack states what a *correct* system does. In five of the ten the correct
+Each attack states what a *correct* system does. In five of the eleven the correct
 behaviour is **a refusal**, which is worth saying plainly: refusal is the
 product, not the failure mode. An assistant that answers a question whose only
 evidence is in somebody else's mailbox has not been helpful, it has been a
@@ -51,18 +51,19 @@ import json
 import statistics
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+
+import numpy as np
 
 import eval  # noqa: F401  - path bootstrap; see eval/__init__.py
-import numpy as np
 from sightline.authz.compile import PlanCompiler, compile_plan, grant_tokens_for_object
 from sightline.authz.oracle import run_oracle
 from sightline.authz.recheck import LiveRechecker, recheck
 from sightline.authz.tuples import MemoryTupleStore
 from sightline.errors import BudgetExceeded
-from sightline.generate import ProviderChain, ProviderResult
+from sightline.generate import PASSAGE_OPEN, ProviderChain, ProviderResult
 from sightline.ingest.embed import EMBED_DIM, HashEmbedder
 from sightline.retrieve import Retriever
 from sightline.settings import RetrievalSettings, Settings
@@ -577,32 +578,51 @@ def injection_cannot_widen_the_filter() -> AttackResult:
     fixture = build_fixture(provider=provider, inject=_INJECTION_QUIET)
     result = fixture.retriever.ask("engineering handbook onboarding checklist", fixture.alice, k=5)
 
+    prompt = provider.last_user_prompt
     cited = sorted({str(c.object) for c in result.answer.citations})
     leaked_citation = [ref for ref in cited if ref.startswith("doc:fin")]
-    prompt_had_fin = "fin-" in provider.last_user_prompt
     scanner_bypassed = provider.calls > 0
+    # The attacker's own text names Bob's chunk ids, and that text *is* in the
+    # prompt — as data, inside a delimited block, which is the whole point of
+    # delimiting it. So the leak test is for a forbidden passage, not for a
+    # forbidden id: does a delimiter block for one of Bob's chunks appear, and
+    # does Bob's secret appear anywhere outside the attacker's own paragraph?
+    # Testing for the id string alone would have failed on the attacker's
+    # payload and reported a leak that did not happen.
+    forbidden_blocks = [
+        chunk_id
+        for chunk_id in ("chunk-fin-1", "chunk-fin-2")
+        if PASSAGE_OPEN.format(id=chunk_id) in prompt
+    ]
+    secret_in_prompt = CANARY_SECRET in prompt
     return AttackResult(
         name="injection_cannot_widen_the_filter",
         owasp="LLM01",
         attack="bypass the scanner, then have the model name forbidden chunk ids outright",
-        correct_behaviour="forbidden ids are never in the prompt and can never become citations",
+        correct_behaviour="forbidden passages are never in the prompt and cannot become citations",
         passed=(
             scanner_bypassed
             and not leaked_citation
-            and not prompt_had_fin
+            and not forbidden_blocks
+            and not secret_in_prompt
             and CANARY_SECRET not in result.answer.text
         ),
         evidence={
             "scanner_bypassed": scanner_bypassed,
             "provider_calls": provider.calls,
-            "forbidden_ids_in_prompt": prompt_had_fin,
+            "forbidden_passages_in_prompt": forbidden_blocks,
+            "secret_in_prompt": secret_in_prompt,
+            "attacker_text_in_prompt": "chunk-fin-1" in prompt,
             "citations": cited,
             "leaked_citations": leaked_citation,
             "answer_refused": result.answer.refused,
             "answer_text": result.answer.text[:120],
             "note": (
                 "the scanner is bypassed on purpose; this measures the structural "
-                "control, not the pattern matcher"
+                "control, not the pattern matcher. The attacker's own text names "
+                "Bob's chunk ids and appears in the prompt as delimited data — "
+                "that is not a leak, and conflating the two is how this attack "
+                "reports a false positive."
             ),
         },
     )

@@ -182,6 +182,13 @@ class Corpus:
         return len(self.chunks)
 
 
+#: A materialised instance, because ``CorpusSpec`` uses ``slots=True`` and a
+#: slotted dataclass exposes slot descriptors on the class rather than the
+#: field defaults. Reading ``CorpusSpec.seed`` gives you a descriptor object,
+#: which argparse accepts happily and ``random.Random`` does not.
+_SPEC_DEFAULTS = CorpusSpec()
+
+
 def _topic_words(spec: CorpusSpec) -> list[list[str]]:
     return [
         [f"t{topic:03d}w{word:02d}" for word in range(spec.words_per_topic)]
@@ -586,16 +593,20 @@ def run_selectivity(
             recalls: list[float] = []
             returned: list[int] = []
             timings: list[float] = []
+            # Constant across queries for a given arm and plan: the candidate set
+            # is decided by the filter, not by the query vector. Recorded from
+            # the first search rather than re-derived, so the published cost is
+            # the cost of a search that actually ran.
+            cost = 0
             for row in range(len(corpus.queries)):
                 query = corpus.query_vectors[row]
                 hits: list[UncheckedHit] = []
                 for _ in range(max(1, repeats)):
                     started = time.perf_counter()
-                    hits, _cost = arm.search(query, k)
+                    hits, cost = arm.search(query, k)
                     timings.append((time.perf_counter() - started) * 1000.0)
                 recalls.append(_recall([h.chunk_id for h in hits], truth[row]))
                 returned.append(len(hits))
-            _, cost = arm.search(corpus.query_vectors[0], k)
             arm_results.append(
                 ArmResult(
                     arm=name,
@@ -718,10 +729,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="python -m eval.selectivity",
         description="Recall and cost versus permission density. The headline chart.",
     )
-    parser.add_argument("--docs", type=int, default=CorpusSpec.n_docs)
-    parser.add_argument("--queries", type=int, default=CorpusSpec.n_queries)
+    parser.add_argument("--docs", type=int, default=_SPEC_DEFAULTS.n_docs)
+    parser.add_argument("--queries", type=int, default=_SPEC_DEFAULTS.n_queries)
     parser.add_argument("--k", type=int, default=_K)
-    parser.add_argument("--seed", type=int, default=CorpusSpec.seed)
+    parser.add_argument("--seed", type=int, default=_SPEC_DEFAULTS.seed)
     parser.add_argument("--repeats", type=int, default=1, help="timing repeats per query")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of a table")
     parser.add_argument("--quiet", action="store_true")

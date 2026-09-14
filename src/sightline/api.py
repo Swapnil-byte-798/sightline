@@ -60,7 +60,7 @@ from sightline.retrieve import PipelineEvent, QueryResult, Retriever, SearchResu
 from sightline.settings import Settings, load_settings
 from sightline.types import ObjectRef, PrincipalRef
 
-__all__ = ["app", "build_retriever", "create_app"]
+__all__ = ["app", "build_retriever", "create_app"]  # noqa: F822  (app via PEP 562 __getattr__)
 
 API_VERSION = "1"
 

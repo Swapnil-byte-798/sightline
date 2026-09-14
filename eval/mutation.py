@@ -68,6 +68,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 import eval  # noqa: F401  - path bootstrap; see eval/__init__.py
 from eval import REPO_ROOT
@@ -696,6 +697,15 @@ def materialise(mutation: Mutation, dest: Path, *, repo_root: Path = REPO_ROOT) 
 # Running the suite
 # --------------------------------------------------------------------------
 
+#: Where the child pytest writes its machine-readable report, inside the scratch
+#: tree so it disappears with it.
+_JUNIT_NAME = ".sightline-mutation-report.xml"
+
+# Fallback only. pytest's terminal summary is a presentation detail and it
+# changes: pytest 9 with `-q` prints no "N passed" line at all on a green run,
+# which silently made every count zero and every baseline look like a suite that
+# collects nothing. That bug cost an afternoon, so the counts now come from
+# --junitxml and this regex is the thing that runs when the XML is missing.
 _COUNT_RE = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)")
 _FAIL_LINE_RE = re.compile(r"^(FAILED|ERROR) (\S+)", re.MULTILINE)
 
@@ -736,6 +746,44 @@ class SuiteRun:
         }
 
 
+def _read_junit(path: Path) -> tuple[dict[str, int], str] | None:
+    """Counts and the first failing node id from a JUnit XML report.
+
+    ``None`` when the file is absent or unreadable — pytest writes it even for a
+    collection error, so a missing file means the interpreter never got that
+    far, and the caller falls back to scraping the terminal output.
+    """
+    if not path.is_file():
+        return None
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (ElementTree.ParseError, OSError):
+        return None
+
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    total = failures = errors = skipped = 0
+    for suite in suites:
+        total += int(suite.get("tests", 0))
+        failures += int(suite.get("failures", 0))
+        errors += int(suite.get("errors", 0))
+        skipped += int(suite.get("skipped", 0))
+
+    first = ""
+    for case in root.iter("testcase"):
+        if case.find("failure") is not None or case.find("error") is not None:
+            where = case.get("file") or case.get("classname") or ""
+            first = f"{where}::{case.get('name', '')}".lstrip(":")
+            break
+
+    counts = {
+        "passed": max(0, total - failures - errors - skipped),
+        "failed": failures,
+        "error": errors,
+        "skipped": skipped,
+    }
+    return counts, first
+
+
 def run_suite(
     root: Path,
     *,
@@ -746,13 +794,24 @@ def run_suite(
 ) -> SuiteRun:
     """Run the test suite rooted at ``root``. Never raises for a test failure.
 
+    Counts come from ``--junitxml``, not from the terminal summary. Parsing the
+    summary line is the obvious thing and it is wrong: it is a presentation
+    detail that changes between pytest releases, and on the version installed
+    here ``-q`` prints no count line at all when everything passes. A harness
+    that reads "0 passed" off a green suite reports every mutant as unscorable,
+    which is the most expensive kind of wrong — it looks like a result.
+
     ``-p no:cacheprovider`` because the scratch tree is deleted afterwards and a
     cache directory in it is noise. ``PYTHONDONTWRITEBYTECODE`` for the same
     reason, and because a stale ``__pycache__`` copied from the working tree
     would be the one loaded — which is exactly the class of bug this harness is
     built to avoid having.
     """
-    argv = [python, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"]
+    junit = root / _JUNIT_NAME
+    argv = [
+        python, "-m", "pytest", "-q", "--no-header",
+        "-p", "no:cacheprovider", f"--junitxml={junit}",
+    ]
     if exitfirst:
         argv.append("-x")
     argv.extend(pytest_args)
@@ -784,12 +843,18 @@ def run_suite(
         timed_out = True
     duration = time.perf_counter() - started
 
-    counts = {name: 0 for name in ("passed", "failed", "error", "skipped")}
-    for value, name in _COUNT_RE.findall(out):
-        key = "error" if name.startswith("error") else name
-        if key in counts:
-            counts[key] = int(value)
-    failure = _FAIL_LINE_RE.search(out)
+    parsed = _read_junit(junit)
+    if parsed is None:
+        counts = {name: 0 for name in ("passed", "failed", "error", "skipped")}
+        for value, name in _COUNT_RE.findall(out):
+            key = "error" if name.startswith("error") else name
+            if key in counts:
+                counts[key] = int(value)
+        match = _FAIL_LINE_RE.search(out)
+        first = match.group(2) if match else ""
+    else:
+        counts, first = parsed
+
     return SuiteRun(
         returncode=code,
         passed=counts["passed"],
@@ -798,7 +863,7 @@ def run_suite(
         skipped=counts["skipped"],
         duration_s=duration,
         timed_out=timed_out,
-        first_failure=failure.group(2) if failure else "",
+        first_failure=first,
         tail="\n".join(out.strip().splitlines()[-25:]),
     )
 

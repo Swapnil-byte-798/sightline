@@ -1,0 +1,108 @@
+# Local development stack: the API, Qdrant, and Postgres.
+#
+# THIS IS A DEVELOPMENT FILE AND IT IS NOT A DEPLOYMENT.
+# It runs the API in development mode with a hard-coded HMAC secret so you can
+# mint a token and try the thing in thirty seconds. That secret is a backdoor
+# with a friendly name, which is why `Settings` refuses to start with it set
+# when SIGHTLINE_ENV is production. Do not copy this file to a server and
+# change one line.
+#
+# Why both Qdrant and Postgres, when the in-process backends pass every test:
+# they are the two independent enforcement paths. Qdrant is the serving index
+# with the filter pushed into the graph traversal; Postgres is pgvector plus
+# row-level security, where the database itself refuses to return a row the
+# principal may not see. Running both locally is how the conformance suite
+# proves they agree, and disagreement between them is a finding.
+#
+#   docker compose up --build      # the stack
+#   docker compose run --rm api python -m sightline.ingest.pipeline
+#   curl localhost:8000/readyz
+
+name: sightline
+
+services:
+  api:
+    build:
+      context: .
+      # The default build installs no optional extras; the stack needs the two
+      # client libraries, so ask for them here.
+      args:
+        EXTRAS: ".[qdrant,postgres]"
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # Development, explicitly. The image defaults to production.
+      SIGHTLINE_ENV: development
+      # Dev-only bearer tokens, signed with a secret published in this file.
+      SIGHTLINE_DEV_HMAC_SECRET: local-development-only-not-a-secret
+      SIGHTLINE_VECTOR_BACKEND: qdrant
+      SIGHTLINE_VECTOR_URL: http://qdrant:6333
+      SIGHTLINE_COLLECTION: sightline
+      SIGHTLINE_TUPLE_STORE: /var/lib/sightline/tuples.db
+      SIGHTLINE_AUDIT_PATH: /var/lib/sightline/audit.jsonl
+      # Rotating this forces a reindex: the tokens in the index are keyed with
+      # it. That cost is real and is written down rather than discovered.
+      SIGHTLINE_GRANT_KEY: local-development-grant-key
+      SIGHTLINE_EMBEDDER: auto
+      PGHOST: postgres
+      PGDATABASE: sightline
+      PGUSER: sightline
+      PGPASSWORD: sightline
+    depends_on:
+      qdrant: { condition: service_started }
+      postgres: { condition: service_healthy }
+    # The container writes nothing outside the two mounts below. If a future
+    # change needs a writable path somewhere else, that is worth a conversation
+    # rather than a flag.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - state:/var/lib/sightline
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    # Bound to loopback. An unauthenticated vector database on 0.0.0.0 is a copy
+    # of the corpus with a REST API in front of it.
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant:/qdrant/storage
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: sightline
+      POSTGRES_USER: sightline
+      POSTGRES_PASSWORD: sightline
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sightline -d sightline"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  state:
+  qdrant:
+  postgres:

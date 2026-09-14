@@ -1,158 +1,411 @@
 # Sightline
 
-**Internal AI search that can only see what you are allowed to see — and proves it.**
-
-Companies buy an AI assistant over their own documents, then freeze the rollout.
-Not because the answers are bad. Because they are good.
-
-A shared folder someone set to "everyone in the company" in 2019 was harmless
-while finding it meant knowing the URL. The moment a search engine indexes it,
-that folder is one plain-English question away from every employee. So the
-security team stops the rollout, and the company pays for a permissions audit
-before it will switch anything on.
-
-Sightline is the search service built the other way round. Permissions are not a
-filter bolted on after retrieval. They are compiled into the search itself, so a
-document you cannot open is never a candidate, never enters the model's context,
-and can never be cited.
+Internal AI search that can only see what you are allowed to see, and proves it.
 
 ---
 
-## The rule the whole system rests on
+## The problem
 
-> **The index is a hint. The database is the authority.**
+A company buys AI search over its own documents. The pilot is excellent. Then
+somebody in finance asks a normal question and the assistant answers it
+correctly, citing a compensation spreadsheet from a SharePoint folder that a
+departing admin set to "everyone" in 2019.
 
-A vector index stores a copy of permission state, so it is always slightly stale.
-That staleness window is where leaks live. Sightline closes it by making a leak
-unrepresentable rather than unlikely:
+Nothing was hacked. The retriever did its job. The document was, on paper,
+readable by that person — it was just never *findable* before, because finding it
+required knowing it existed and guessing the folder. Semantic search removes
+that accident of obscurity across the entire corpus at once, and every ACL
+mistake a company has made since it bought its first file server becomes
+reachable by asking a question in English.
 
-- `VectorStore.search()` returns `UncheckedHit`.
-- The answer builder accepts only `Hit`.
-- The only thing that turns one into the other is `recheck()`, against the live
-  permission store.
+So the rollout freezes. Not because the technology failed, but because nobody can
+answer "what else can it see?"
 
-So a stale index **loses** results. It cannot **leak** them. A document whose
-permissions were tightened is dropped at recheck; one whose permissions were
-loosened is missed until reindex. That asymmetry is deliberate: being briefly
-unhelpful is recoverable, being briefly unsafe is not.
+Sightline is the answer to that question. Permissions are compiled *into* the
+search index, so a document you cannot open is never a candidate, never enters
+the model's context, and cannot be cited. It is not a filter applied to results.
+It is the shape of the search.
 
-See [ADR 0001](docs/adr/0001-index-is-a-hint.md).
+---
 
-## Why permission filtering breaks vector search
+## The rule this is built on
 
-Search returns a fixed-size top-`k` ranked by similarity over whatever it
-searched. Filter afterwards and you do not get the best `k` results the user may
-see — you get whatever scraps of the global top `k` happen to be permitted.
+**The index is a hint. The database is the authority.**
 
-`examples/recall_collapse.py` measures it. Same 4,000 chunks, two stores:
+A vector index is a denormalised copy of permission state. The copy is made at
+ingest and the permissions change afterwards, so the index is always slightly
+wrong. Every system that treats it as authoritative has a window — usually
+minutes, sometimes hours — where a revoked user still retrieves.
 
-```
- visible   pre-filter  post-filter    recall
-    2.5%         10.0          0.2     0.020
-    5.0%         10.0          0.4     0.043
-   10.0%         10.0          0.9     0.092
-   50.0%         10.0          5.0     0.497
-  100.0%         10.0         10.0     1.000
-```
+Sightline closes that window by refusing to make it representable in the type
+system:
 
-A user who can see 2.5% of the corpus asks for ten results and gets **0.2**. The
-assistant then says it does not know, about a document in the user's own folder.
+```python
+# sightline/store/base.py
+class UncheckedHit:  # what an index returns. Not safe to show anyone.
+    ...
 
-Nothing logs an error, which is why this survives in production for months. The
-index answered inside its latency budget, the filter removed exactly what it was
-meant to, the model wrote an honest sentence, and the status code was 200. **No
-component's contract was violated.**
-
-```bash
-make demo
+class Hit:           # what the answer builder accepts. Nothing else.
+    why_allowed: str
+    checked_at_epoch: int
 ```
 
-## Architecture
+There is exactly one function that turns an `UncheckedHit` into a `Hit`:
+`authz.recheck()`, which consults the live tuple store. No flag turns it off, no
+fast path skips it, and no cache sits in front of it. A test greps the source
+tree to assert that `Hit(...)` is constructed in that one file and nowhere else
+(`tests/test_no_unchecked_construction.py`), because this is the invariant that
+the type system cannot enforce on its own.
 
-```
-  tuples (object#relation@principal)        Zanzibar-style, groups nest
-            |
-            v
-  +---------------------+  compile   +----------------------------+
-  |  Check()            | ---------> |  FilterPlan                |
-  |  authoritative,     |            |  grant tokens + strategy   |
-  |  recursive, audited |            |  (enumerate / exact scan / |
-  +---------------------+            |   tokens / unfiltered)     |
-            ^                        +-------------+--------------+
-            |                                      |
-            | recheck (live)                       v
-            |                          +-----------------------+
-  +---------+-----------+              |  vector store         |
-  |  Hit  <-- recheck --<--------------|  UncheckedHit         |
-  |  (only these reach  |              |  Qdrant / pgvector+RLS|
-  |   the model)        |              |  memory / postfilter  |
-  +---------------------+              +-----------------------+
-```
+The consequence is the whole security argument:
 
-Chunks are tagged with grant tokens derived from **groups**, never user ids. A
-person joining or leaving a group rewrites zero vectors ([ADR 0002](docs/adr/0002-grant-tokens-not-user-ids.md)).
-An empty permission set means deny everything ([ADR 0003](docs/adr/0003-fail-closed.md)).
-
-## Vector stores
-
-| Backend | Role | Why |
+| The index is stale because... | What happens | Cost |
 |---|---|---|
-| **Qdrant** | serving | Filter-aware graph traversal; the filter prunes *during* the walk |
-| **pgvector + RLS** | second enforcement layer | Postgres refuses cross-principal reads even if application code is wrong |
-| **FAISS** | oracle | Exact search, never served — it produces the ground truth others are measured against |
-| **memory** | reference | Pure numpy; the whole test suite runs on it with no services |
-| **postfilter** | baseline | Implements the bug on purpose, so the collapse can be measured |
+| a document's permissions were **tightened** | the index offers it, the live check drops it, the drop is counted | none |
+| a document's permissions were **loosened** | the index never offers it; it is missing until reindex | availability, deliberately accepted |
 
-All five sit behind one ~40-line protocol, so the comparison is apples to apples.
+A stale index **loses** results. It cannot leak them. That asymmetry is the
+product.
+
+---
+
+## The numbers
+
+**Every number below is a placeholder until CI fills it in.** If a figure in
+this section still reads as a doubled-brace placeholder, this README has never
+been generated and you should not believe a word of it.
+
+`make headline` recomputes all of them from a real run and writes them here.
+`make readme-check` recomputes them again and fails the build if a committed
+figure no longer matches. A figure typed into a README by hand is a claim; a
+figure regenerated by CI and diffed against the committed one is a measurement.
+
+Generated `{{GENERATED_AT}}` from commit `{{GIT_SHA}}` on `{{MACHINE}}`.
+Embedder `{{EMBEDDER}}` (semantic: `{{SEMANTIC}}`).
+
+### Does the filter agree with the authority?
+
+The differential oracle samples `(principal, document)` pairs, compiles a plan
+for the principal, and compares what the plan admits against what `check()`
+decides. It is a blocking CI gate.
+
+| | measured | target |
+|---|---:|---:|
+| pairs sampled | {{ORACLE_PAIRS}} | — |
+| **false allow** (plan admits, check denies) | **{{ORACLE_FALSE_ALLOW}}** | **0** |
+| false deny (plan misses, check allows) | {{ORACLE_FALSE_DENY_RATE}} | < 0.1% |
+
+False allow has no acceptable non-zero value and no threshold to tune. A false
+allow is a breach: the compiler invented a derivation the authority refuses.
+False denies are a recall cost of the split depth budget (see *Limits*) and are
+reported rather than hidden.
+
+### How much recall does post-filtering lose?
+
+The baseline arm — retrieve the global top-k, then drop what the user may not
+see — is implemented here **on purpose**, because demonstrating its collapse is
+the point. `tests/test_postfilter_collapses.py` asserts that it still collapses,
+since a bug we rely on has to be tested like any other behaviour.
+
+<!-- sightline:begin selectivity-table -->
+_Generated by `make headline`. Until then, this space is empty on purpose._
+<!-- sightline:end selectivity-table -->
+
+At 1% visibility, recall@10: post-filter {{RECALL_POSTFILTER_AT_1PCT}},
+post-filter with 10x overfetch {{RECALL_POSTFILTER_X10_AT_1PCT}}, grant-token
+filtering {{RECALL_GRANT_TOKENS_AT_1PCT}}. Corpus {{SELECTIVITY_DOCS}}
+documents, {{SELECTIVITY_QUERIES}} queries.
+
+Note what the overfetch column says: retrieving ten times as many candidates
+buys a constant factor against a problem that scales with 1/density. It helps,
+which is why people ship it and believe the problem is solved.
+
+Recall for the correctly-filtered arms is held to a **floor** of
+{{RECALL_FLOOR}}, never to an equality. HNSW is approximate; "filtered top-k
+equals exact top-k" is true only when a query routes to brute force, and
+asserting it anywhere else is a test that will eventually lie.
+
+### Does the test suite actually catch permission bugs?
+
+Fifteen permission bugs are pre-registered in `docs/FRD.md` §8.2 — the off-by-one
+in depth, the empty token set that matches everything, the cache keyed without
+the epoch — and applied one at a time to a throwaway copy of the source tree.
+
+| | |
+|---|---:|
+| kill rate | **{{MUTATION_KILL_RATE}}** |
+| mutants scored | {{MUTATION_TOTAL}} |
+| survivors | {{MUTATION_SURVIVORS}} |
+| line coverage | {{COVERAGE_PCT}} |
+
+<!-- sightline:begin mutation-survivors -->
+_Generated by `make headline`._
+<!-- sightline:end mutation-survivors -->
+
+Survivors are named rather than summarised. A surviving mutant is a behaviour
+nobody tests, and the honest thing to do with that is print it.
+
+### What does it cost?
+
+| stage | p50 | p95 |
+|---|---:|---:|
+| plan compilation | {{PLAN_P50_MS}} | {{PLAN_P95_MS}} |
+| filtered search | {{SEARCH_P50_MS}} | {{SEARCH_P95_MS}} |
+| live recheck | {{RECHECK_P50_MS}} | {{RECHECK_P95_MS}} |
+| end to end | {{P50_MS}} | {{P95_MS}} |
+
+Measured on {{N_CHUNKS}} chunks, {{INDEX_MB}} resident, on the reference machine
+described in *Limits*. These are not numbers from a benchmark rig.
+
+---
+
+## How it works
+
+```
+   INGEST                                        QUERY
+   ------                                        -----
+   document                                      principal
+      |                                             |
+      v                                             v
+   chunk the text                          compile a FilterPlan
+      |                                     (walk the group graph
+      v                                      from the person upward)
+   expand(doc, "viewer")                              |
+      |                                               |
+      v                                               v
+   granting usersets                        usersets they hold
+   group:legal#member                       group:legal#member
+      |                                               |
+      v  keyed hash                        keyed hash  v
+   grant tokens                                grant tokens
+   stamped on every chunk                      carried by the plan
+      |                                               |
+      +----------------------+------------------------+
+                             |  the two sides meet at the userset:
+                             |  no user ids in the index, ever
+                             v
+            +--------------------------------------------+
+            |  vector index: the filter runs INSIDE the  |
+            |  search, not after it                      |
+            +--------------------------------------------+
+                                |
+                         UncheckedHit[]      <- not safe to show anyone
+                                |
+                                v
+                  recheck() against live tuples
+                                |
+                             Hit[]           <- the only type the answer
+                                |               builder accepts
+                                v
+                  answer, citations, audit row
+```
+
+**Permissions are Zanzibar-style tuples.** `doc:42#viewer@group:legal#member`
+reads as "members of the legal group may view document 42". Nested groups are a
+userset pointing at another userset. There is no `tenant_id` column and no
+`is_public` boolean: both stop being expressible the moment an organisation has
+nested groups, and both are how permission bugs get shipped.
+
+**Chunks are tagged with grant tokens derived from groups.** Never user ids,
+never document-id lists. A person joining or leaving a group rewrites **zero**
+vectors — their next query compiles a different token set. Only a change to a
+document's *own* permissions touches the index. Getting this backwards is how a
+"reindex on membership change" design turns a new hire into an hour of writes.
+
+**Tokens are keyed hashes.** `gt_9f3a...`, not `group:legal`. Someone who can
+read the collection payloads learns how many groups can see a document, not
+which ones. Rotating the key forces a reindex; that cost is written down rather
+than discovered.
+
+**A policy epoch counter increments on every permission write.** A plan carries
+the epoch it was compiled under. A plan older than the live epoch is stale and is
+not served. The cache key contains the epoch, so invalidation needs no
+invalidation logic: a write makes every existing key unreachable. Invalidation
+you have to remember to call is invalidation that does not happen.
+
+**Strategy is chosen from measured cardinality.** A principal who can see forty
+documents gets their ids enumerated; one who can see a hundred thousand gets a
+token filter pushed into the index traversal; `UNFILTERED` requires proving they
+can see the whole corpus and is not reachable without being told how big the
+corpus is.
+
+---
 
 ## Quickstart
 
+Needs Python 3.11+. Nothing else — no Docker, no database, no GPU, no model
+download.
+
 ```bash
-make venv
-make test     # 46 tests, no external services, no network
-make demo     # the recall collapse
-make serve    # API on :8000
+git clone https://github.com/<you>/sightline && cd sightline
+make install
+make test          # the whole suite, in-memory, no services
+make demo          # the recall collapse, in one file
+make oracle        # the blocking gate: false_allow must be 0
 ```
 
-## Documentation
+Serve it:
 
-| | |
-|---|---|
-| [PRD](docs/PRD.md) | problem, buyer, goals, non-goals, competitive landscape |
-| [FRD](docs/FRD.md) | numbered requirements, permission model, API, security |
-| [Field guide](https://github.com/Swapnil-byte-798/sightline-field-guide) | 105 pages, from first principles, with interview questions |
-| [ADRs](docs/adr/) | the three decisions everything else follows from |
+```bash
+make ingest        # build an index from the sample corpus
+make serve         # http://127.0.0.1:8000/docs
+```
 
-## Status — what is and is not built
+Ask it something:
 
-Honest inventory, because the alternative is a README that lies.
+```bash
+curl -s localhost:8000/v1/ask \
+  -H "authorization: Bearer $(python -m sightline.auth mint user:alice)" \
+  -H 'content-type: application/json' \
+  -d '{"question": "what is our parental leave policy?"}' | jq
+```
 
-**Working and tested.** Domain types; Zanzibar-style tuple store (memory and
-SQLite); recursive `Check()` with cycle detection and derivation paths; the
-permission compiler; `recheck()`; the differential oracle; five vector stores;
-ingest (chunking, ONNX embedding, Enron connector); guardrails (direct and
-indirect prompt injection, PII, structural grounding); hash-chained audit log;
-JWT auth; OpenTelemetry and Prometheus wiring; the HTTP API; the selectivity
-evaluation harness. 46 tests pass with only `pydantic`, `fastapi`, `numpy`
-and `httpx` installed.
+Every response carries the strategy that served it, the policy epoch it was
+served under, and how many candidates the live recheck dropped.
 
-**Not built yet.**
+The full local stack — API, Qdrant, Postgres with row-level security — is
+`make docker-up`. That compose file is a development environment and says so at
+the top; it ships a published HMAC secret so you can mint a token in thirty
+seconds, and the settings module refuses to start with that secret set in
+production.
 
-- `eval/mutation.py` — the headline metric. Plant 15 deliberate permission bugs,
-  measure how many the test suite catches. Publishing 12/15 with the three
-  survivors named beats claiming 15/15 without the harness.
-- `eval/attack.py` — cross-principal ground truth, existence probing, revocation
-  races, timing enumeration, mapped to the OWASP LLM Top 10.
-- `eval/report.py` — machine-write every number in this README from a fresh run
-  and fail CI when a committed number drifts.
-- Deployment. Nothing is running at a public URL yet.
-- Load testing. No capacity numbers exist, so none are claimed.
-- `Dockerfile` and `docker-compose.yml`.
+---
 
-**No numbers in this README are invented.** The recall table is the real output
-of `examples/recall_collapse.py`, which runs in CI on every commit. When
-`eval/report.py` lands, the rest will be generated the same way.
+## Trade-offs
+
+Every row here is a decision with a cost. The cost is stated.
+
+| Decision | Why | What it costs |
+|---|---|---|
+| Filter pushed into the index | Post-filtering loses most of its recall at low visibility (see the numbers) | The index must carry permission data, so permission changes mean vector writes |
+| Grant tokens derived from groups | A membership change rewrites no vectors | A document whose own ACL changes must be reindexed, and until it is, it is invisible rather than wrong |
+| Tokens are keyed hashes | Payloads do not disclose the group directory | Rotating the key means a full reindex |
+| Recheck every candidate against the live store | The index cannot be trusted, by construction | One graph walk per distinct document per query, on the hot path |
+| Epoch in the cache key | No invalidation logic to forget | Every permission write cold-starts every plan cache |
+| Depth budget split 8/8 | A token match can never imply a path `check()` would refuse | Nesting deeper than 8 groups is visible to `check()` and invisible to search — a false deny, reported by the oracle |
+| Refusals held to a constant-time floor | Timing otherwise distinguishes "no such document" from "not for you" | Every empty-handed refusal is slower than it needs to be |
+| Answers cite chunk ids only, reconstructed | A citation to a document you cannot see is unrepresentable | The model cannot cite anything it was not given, including things it correctly inferred |
+| ONNX, never PyTorch | The reference machine is macOS x86_64, where torch ships no wheels past 2.2.x | No GPU path, and a narrower model selection |
+| Post-filter baseline kept in the tree | The collapse is the argument for everything else | A module that must never serve traffic, fenced off with an import-time guard |
+
+---
+
+## Limits
+
+The reference machine is a 2015 Intel MacBook Pro: dual core, 8 GB, no GPU. Every
+number in this README was produced there or on a free GitHub runner (4 vCPU,
+16 GB). Nothing here has been tested above {{N_CHUNKS}} chunks, and claims beyond
+that would be extrapolation.
+
+Known, measured, and not fixed:
+
+* **Nesting deeper than 8 groups is invisible to search.** `check()` handles 16.
+  The budget is split between the object side (folder nesting, at ingest) and the
+  subject side (group nesting, at query time) so that a token match can never
+  imply a derivation the authority would refuse. Raising the limit is a one-line
+  change and costs deeper walks on every check; nobody has measured what that
+  costs on the reference machine, so it has not been raised.
+* **The timing channel is narrowed, not closed.** A constant-time floor under
+  refusals removes the 60x difference between "your plan is empty" and "the index
+  found nothing you may see". A patient attacker with thousands of timed probes
+  still wins. The honest fix is a decoy search on the cheapest path in the
+  system, and it is not built.
+* **A heavily-permissioned principal blows the plan-compilation budget.** Someone
+  who can read the entire corpus needs a walk over every grant edge of every
+  group they belong to. The fix is a dedicated subject-graph index, not a smaller
+  cap.
+* **Redaction is hygiene, not a control.** The PII pass has false positives and
+  false negatives, no detection rate is claimed for it, and it cannot be
+  selective by reader. Permission is the control.
+* **The audit chain proves internal consistency, not completeness.** An operator
+  who can rewrite the whole file can rewrite the whole chain. Detecting that needs
+  the head digest published somewhere they do not control, which is an
+  integration this repository does not have.
+
+---
+
+## What is deliberately not built
+
+Naming these is cheaper than being asked about them.
+
+* **Intersection and exclusion rewrites.** `viewer AND NOT denied` is not
+  supported. A half-implemented exclusion is a deny that silently does not deny,
+  which is worse than no exclusion at all.
+* **Write-through index updates.** A permission change enqueues a reindex of the
+  affected document; it does not patch the vectors in place. Between the two, the
+  document is invisible rather than wrong.
+* **Multi-tenancy.** Not a `tenant_id` column, and not anything else. Tenancy is
+  expressible as tuples, and adding a second mechanism for the same idea is how
+  the two disagree.
+* **Delete.** The store protocol has no delete; a reindex rewrites. Real
+  deletion needs tombstones and a compaction story, and half of that is worse
+  than none.
+* **An admin UI.** `/v1/explain` returns the full derivation tree as JSON and
+  the console that renders it does not exist.
+* **Streaming model tokens.** The SSE endpoint streams pipeline *stages*, not
+  tokens. Text in front of the reader before grounding and citation
+  reconstruction have run means a refusal you have already displayed half of.
+* **A recall claim for the hash embedder.** It hashes words and has never seen a
+  sentence. Any result computed with it is stamped `semantic=false`, because
+  publishing its recall as semantic recall is a mistake this author has made
+  before.
+
+---
+
+## Repository map
+
+```
+src/sightline/
+  types.py            domain types; the vocabulary everything else speaks
+  authz/
+    tuples.py         tuple storage, namespace configs, the epoch counter
+    check.py          THE AUTHORITY. slow, bounded, terminating, auditable
+    compile.py        principal -> FilterPlan; grant-token derivation
+    recheck.py        UncheckedHit -> Hit. the shortest file here, on purpose
+    oracle.py         the differential gate: plan versus check
+  store/
+    base.py           the VectorStore protocol and the two hit types
+    memory.py         numpy reference backend; exact, and the definition of right
+    qdrant_store.py   the serving path
+    pgvector_store.py a second, independent enforcement layer (row-level security)
+    postfilter.py     the deliberately-wrong baseline arm
+  retrieve.py         the pipeline, in the one supported order
+  generate.py         provider chain; citations reconstructed, never parsed
+  audit.py            hash-chained audit log
+  api.py              FastAPI surface
+eval/
+  selectivity.py      the headline chart
+  mutation.py         fifteen planted permission bugs
+  attack.py           the leak suite
+  report.py           writes the numbers into this file; --check fails on drift
+tests/                runs on pydantic, fastapi, numpy, httpx and nothing else
+docs/adr/             the three decisions worth arguing about
+```
+
+---
+
+## For `eval/report.py`
+
+The placeholders this file expects, so the generator and the document cannot
+drift apart silently:
+
+`GENERATED_AT` `GIT_SHA` `MACHINE` `EMBEDDER` `SEMANTIC` `N_CHUNKS` `INDEX_MB`
+`COVERAGE_PCT` `ORACLE_PAIRS` `ORACLE_FALSE_ALLOW` `ORACLE_FALSE_DENY_RATE`
+`SELECTIVITY_DOCS` `SELECTIVITY_QUERIES` `RECALL_FLOOR`
+`RECALL_POSTFILTER_AT_1PCT` `RECALL_POSTFILTER_X10_AT_1PCT`
+`RECALL_GRANT_TOKENS_AT_1PCT` `MUTATION_KILL_RATE` `MUTATION_TOTAL`
+`MUTATION_SURVIVORS` `PLAN_P50_MS` `PLAN_P95_MS` `SEARCH_P50_MS` `SEARCH_P95_MS`
+`RECHECK_P50_MS` `RECHECK_P95_MS` `P50_MS` `P95_MS`
+
+Plus two machine-managed blocks, replaced between their markers:
+`selectivity-table` and `mutation-survivors`.
+
+A placeholder with no value and a value with no placeholder should both be
+errors. `make readme-check` is the only thing standing between this document and
+the usual README, where the numbers were true once.
+
+---
 
 ## Licence
 
-MIT
+Apache 2.0. See `LICENSE`.
