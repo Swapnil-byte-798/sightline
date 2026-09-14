@@ -71,12 +71,12 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from sightline.authz.tuples import TupleStore
 
 __all__ = [
-    "MAX_USERSET_DEPTH",
+    "DEPTH_LIMIT_NOTE",
     "MAX_OBJECT_DEPTH",
     "MAX_SUBJECT_DEPTH",
-    "DEPTH_LIMIT_NOTE",
-    "UsersetTree",
+    "MAX_USERSET_DEPTH",
     "Explanation",
+    "UsersetTree",
     "check",
     "expand",
     "expand_leaves",
@@ -176,7 +176,7 @@ class _Evaluator:
     the entire product is an argument against exactly that.
     """
 
-    def __init__(self, store: "TupleStore", principal: PrincipalRef, max_depth: int) -> None:
+    def __init__(self, store: TupleStore, principal: PrincipalRef, max_depth: int) -> None:
         self._store = store
         self._principal = principal
         self._max_depth = max_depth
@@ -339,7 +339,7 @@ class _Evaluator:
 
 
 def check(
-    store: "TupleStore",
+    store: TupleStore,
     object: ObjectRef,
     relation: Relation,
     principal: PrincipalRef,
@@ -383,7 +383,7 @@ class UsersetTree:
     relation: Relation
     rewrite: str
     subjects: tuple[PrincipalRef, ...] = ()
-    children: tuple["UsersetTree", ...] = ()
+    children: tuple[UsersetTree, ...] = ()
     #: ``"cycle"`` or ``"depth"`` when this branch was cut short.
     truncated: str | None = None
 
@@ -406,7 +406,7 @@ class UsersetTree:
 
 
 def expand(
-    store: "TupleStore",
+    store: TupleStore,
     object: ObjectRef,
     relation: Relation,
     *,
@@ -431,7 +431,7 @@ def expand(
 
 
 def _expand_rw(
-    store: "TupleStore",
+    store: TupleStore,
     rw: Rewrite,
     object: ObjectRef,
     relation: Relation,
@@ -471,7 +471,7 @@ def _expand_rw(
 
 
 def _containers(
-    store: "TupleStore", object: ObjectRef, tupleset: Relation, both: bool
+    store: TupleStore, object: ObjectRef, tupleset: Relation, both: bool
 ) -> list[ObjectRef]:
     out = [ObjectRef(t.principal.namespace, t.principal.id) for t in store.read(object, tupleset)]
     if both:
@@ -483,7 +483,7 @@ def _containers(
 
 
 def expand_leaves(
-    store: "TupleStore",
+    store: TupleStore,
     object: ObjectRef,
     relation: Relation,
     *,
@@ -520,7 +520,7 @@ class Explanation:
 
 
 def explain(
-    store: "TupleStore",
+    store: TupleStore,
     object: ObjectRef,
     relation: Relation,
     principal: PrincipalRef,

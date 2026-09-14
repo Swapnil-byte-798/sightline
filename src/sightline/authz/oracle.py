@@ -51,11 +51,11 @@ from sightline.types import FilterPlan, ObjectRef, PrincipalRef, Relation
 __all__ = [
     "FALSE_ALLOW_TARGET",
     "FALSE_DENY_TARGET",
-    "STRATA_BOUNDS",
     "NOBODY",
+    "STRATA_BOUNDS",
     "OraclePair",
-    "Stratum",
     "OracleResult",
+    "Stratum",
     "run_oracle",
 ]
 

@@ -50,22 +50,22 @@ from sightline.authz.tuples import NamespaceConfig, TupleStore
 from sightline.types import FilterPlan, GrantToken, ObjectRef, PlanStrategy, PrincipalRef, Relation
 
 __all__ = [
+    "DEFAULT_NAMESPACE",
+    "DEFAULT_RELATION",
     "ENUMERATE_MAX",
     "EXACT_SCAN_MAX",
-    "UNFILTERED_MIN_RATIO",
     "MAX_ENUMERATION",
-    "DEFAULT_RELATION",
-    "DEFAULT_NAMESPACE",
-    "grant_token_key",
-    "derive_grant_token",
-    "grant_tokens_for_object",
+    "UNFILTERED_MIN_RATIO",
     "Closure",
-    "principal_closure",
-    "reachable_objects",
-    "compile_plan",
-    "plan_admits",
     "PlanCache",
     "PlanCompiler",
+    "compile_plan",
+    "derive_grant_token",
+    "grant_token_key",
+    "grant_tokens_for_object",
+    "plan_admits",
+    "principal_closure",
+    "reachable_objects",
 ]
 
 # --------------------------------------------------------------------------
@@ -132,7 +132,7 @@ def derive_grant_token(
     should a second filtered relation ever appear.
     """
     k = key if key is not None else grant_token_key()
-    msg = f"{subject}|{relation}".encode("utf-8")
+    msg = f"{subject}|{relation}".encode()
     digest = hashlib.blake2b(msg, digest_size=16, key=k).hexdigest()
     return GrantToken(f"gt_{digest}")
 

@@ -58,7 +58,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from sightline.guardrails.grounding import citations_for, refuse
@@ -66,17 +66,17 @@ from sightline.store.base import Hit
 from sightline.types import Answer, PlanStrategy, RefusalReason
 
 __all__ = [
-    "Rung",
+    "CHARS_PER_TOKEN",
+    "EXTRACTIVE_NOTICE",
     "Budget",
     "BudgetDecision",
     "Reservation",
+    "Rung",
     "TokenLedger",
-    "CHARS_PER_TOKEN",
-    "EXTRACTIVE_NOTICE",
-    "estimate_tokens",
     "clamp_k",
     "context_chars",
     "decide",
+    "estimate_tokens",
     "extractive_answer",
     "refuse_over_budget",
 ]
@@ -224,7 +224,7 @@ class Reservation:
 
 
 def _utc_day() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
 @dataclass

@@ -33,7 +33,7 @@ from sightline.authz.tuples import TupleStore
 from sightline.store.base import Hit, UncheckedHit
 from sightline.types import Decision, ObjectRef, PrincipalRef, Relation
 
-__all__ = ["recheck", "LiveRechecker"]
+__all__ = ["LiveRechecker", "recheck"]
 
 
 def recheck(

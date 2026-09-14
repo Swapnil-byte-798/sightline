@@ -49,13 +49,14 @@ anyone sees it.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from sightline.store.base import StoreStats, UncheckedHit
 from sightline.store.memory import first_matching_token, normalise, plan_bindings
 from sightline.types import Chunk, FilterPlan, PlanStrategy
 
-__all__ = ["QdrantVectorStore", "QDRANT_EXTRA_HINT", "POINT_ID_NAMESPACE"]
+__all__ = ["POINT_ID_NAMESPACE", "QDRANT_EXTRA_HINT", "QdrantVectorStore"]
 
 QDRANT_EXTRA_HINT = (
     "the Qdrant backend needs qdrant-client, which is an optional extra: "

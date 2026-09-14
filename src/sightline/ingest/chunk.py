@@ -50,20 +50,20 @@ from typing import Protocol, runtime_checkable
 from sightline.types import Chunk, GrantToken, ObjectRef
 
 __all__ = [
-    "DEFAULT_TARGET_TOKENS",
-    "DEFAULT_OVERLAP_TOKENS",
     "DEFAULT_MIN_TOKENS",
+    "DEFAULT_OVERLAP_TOKENS",
+    "DEFAULT_TARGET_TOKENS",
     "SENTENCE_SNAP_SLACK",
-    "SpanTokenizer",
     "ApproxWordTokenizer",
-    "HFTokenizer",
-    "default_tokenizer",
-    "ChunkingConfig",
-    "TextSpan",
-    "chunk_id_for",
-    "split_text",
-    "chunk_document",
     "Chunker",
+    "ChunkingConfig",
+    "HFTokenizer",
+    "SpanTokenizer",
+    "TextSpan",
+    "chunk_document",
+    "chunk_id_for",
+    "default_tokenizer",
+    "split_text",
 ]
 
 # --------------------------------------------------------------------------
@@ -228,7 +228,7 @@ def chunk_id_for(object: ObjectRef, ordinal: int, text: str, tokenizer_name: str
     text, so two documents that happen to contain the same paragraph get
     distinct chunks — sharing one would mean sharing one ACL.
     """
-    payload = f"{object}\x00{ordinal}\x00{tokenizer_name}\x00{text}".encode("utf-8")
+    payload = f"{object}\x00{ordinal}\x00{tokenizer_name}\x00{text}".encode()
     return f"ch_{hashlib.blake2b(payload, digest_size=16).hexdigest()}"
 
 
@@ -418,7 +418,7 @@ class Chunker:
         assert self.tokenizer is not None
         return self.tokenizer.name
 
-    def with_tokenizer(self, tokenizer: SpanTokenizer) -> "Chunker":
+    def with_tokenizer(self, tokenizer: SpanTokenizer) -> Chunker:
         return replace(self, tokenizer=tokenizer)
 
     def split(self, text: str, *, boundaries: Sequence[int] = ()) -> list[TextSpan]:

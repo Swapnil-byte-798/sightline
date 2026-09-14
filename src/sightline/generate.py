@@ -48,10 +48,11 @@ import os
 import re
 import threading
 import time
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
@@ -67,26 +68,26 @@ from sightline.settings import GenerationSettings
 from sightline.store.base import Hit
 
 __all__ = [
-    "Claim",
-    "Passage",
-    "Generation",
-    "ProviderResult",
-    "Provider",
+    "PASSAGE_CLOSE",
+    "PASSAGE_OPEN",
+    "SYSTEM_PROMPT",
     "CircuitBreaker",
-    "TokenBudget",
-    "GroqProvider",
-    "GeminiProvider",
-    "GitHubModelsProvider",
-    "LlamaCppProvider",
+    "Claim",
     "ExtractiveProvider",
+    "GeminiProvider",
+    "Generation",
+    "GitHubModelsProvider",
+    "GroqProvider",
+    "LlamaCppProvider",
+    "Passage",
+    "Provider",
     "ProviderChain",
+    "ProviderResult",
+    "TokenBudget",
     "build_chain",
     "build_prompt",
-    "parse_claims",
     "estimate_tokens",
-    "SYSTEM_PROMPT",
-    "PASSAGE_OPEN",
-    "PASSAGE_CLOSE",
+    "parse_claims",
 ]
 
 # --------------------------------------------------------------------------
@@ -209,7 +210,7 @@ def build_prompt(question: str, passages: Sequence[Passage]) -> str:
     )
 
 
-_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
+_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 
 def parse_claims(raw: str, allowed_ids: Iterable[str]) -> tuple[Claim, ...]:

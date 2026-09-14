@@ -43,41 +43,42 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any
 
 __all__ = [
+    "ALL_METRICS",
     "HAVE_OTEL",
     "HAVE_PROMETHEUS",
     "PROMETHEUS_CONTENT_TYPE",
-    "Metric",
     "Counter",
-    "Histogram",
     "Gauge",
+    "Histogram",
+    "Metric",
     "SpanHandle",
+    "audit_appends_total",
+    "audit_chain_failures_total",
     "configure",
-    "span",
+    "cross_tenant_leak_total",
     "current_span",
-    "render_metrics",
+    "http_requests_total",
     "note_leak",
+    "plan_cache_total",
+    "provider_requests_total",
+    "provider_tokens_total",
+    "queries_total",
+    "recheck_checked_total",
+    "recheck_dropped_total",
+    "record_generation",
     "record_plan",
     "record_recheck",
     "record_search",
-    "record_generation",
-    "queries_total",
     "refusals_total",
-    "recheck_dropped_total",
-    "recheck_checked_total",
-    "cross_tenant_leak_total",
+    "render_metrics",
+    "span",
     "stage_seconds",
-    "provider_requests_total",
-    "provider_tokens_total",
-    "plan_cache_total",
-    "audit_appends_total",
-    "audit_chain_failures_total",
-    "http_requests_total",
-    "ALL_METRICS",
 ]
 
 # --------------------------------------------------------------------------
@@ -495,7 +496,7 @@ class SpanHandle:
     job too — the job where nobody is looking at traces.
     """
 
-    __slots__ = ("_span", "name", "attributes")
+    __slots__ = ("_span", "attributes", "name")
 
     #: Attribute keys that would put document content or a raw question into
     #: telemetry. Matching is on the suffix so ``chunk.text`` and ``doc.text``
@@ -679,7 +680,7 @@ def render_metrics() -> tuple[bytes, str]:
 def reset_metrics_for_tests() -> None:
     """Zero the in-process counters. Test helper, named so it reads as one."""
     for metric in ALL_METRICS:
-        with metric._lock:  # noqa: SLF001 - same module, deliberate
+        with metric._lock:
             metric._values.clear()
             if isinstance(metric, Histogram):
                 metric._counts.clear()

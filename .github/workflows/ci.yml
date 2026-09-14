@@ -1,0 +1,46 @@
+name: CI
+
+# Public repository, so GitHub-hosted runners are free and unmetered
+# (4 vCPU / 16 GB). CI is this project's entire compute budget.
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests eval examples
+      - name: Test
+        env:
+          PYTHONPATH: src
+        run: pytest tests/ -q
+
+  demo:
+    # The claim the README leads with has to survive every commit, so it runs
+    # as a job rather than sitting in a notebook nobody executes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e .
+      - name: Recall collapse
+        env:
+          PYTHONPATH: src
+        run: python examples/recall_collapse.py

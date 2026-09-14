@@ -16,20 +16,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Literal, NewType
+from typing import NewType
 
 __all__ = [
-    "ObjectRef",
-    "PrincipalRef",
-    "Relation",
-    "Tuple_",
-    "FilterPlan",
-    "PlanStrategy",
-    "Decision",
+    "Answer",
     "Chunk",
     "Citation",
-    "Answer",
+    "Decision",
+    "FilterPlan",
+    "ObjectRef",
+    "PlanStrategy",
+    "PrincipalRef",
     "RefusalReason",
+    "Relation",
+    "Tuple_",
 ]
 
 # A grant token is the unit the vector index actually filters on. Compiling a
@@ -49,7 +49,7 @@ class ObjectRef:
         return f"{self.namespace}:{self.id}"
 
     @classmethod
-    def parse(cls, raw: str) -> "ObjectRef":
+    def parse(cls, raw: str) -> ObjectRef:
         ns, _, ident = raw.partition(":")
         if not ns or not ident:
             raise ValueError(f"malformed object ref: {raw!r} (want 'namespace:id')")
@@ -69,7 +69,7 @@ class PrincipalRef:
         return f"{base}#{self.relation}" if self.relation else base
 
     @classmethod
-    def parse(cls, raw: str) -> "PrincipalRef":
+    def parse(cls, raw: str) -> PrincipalRef:
         subject, _, rel = raw.partition("#")
         ns, _, ident = subject.partition(":")
         if not ns or not ident:
@@ -96,7 +96,7 @@ class Tuple_:
         return f"{self.object}#{self.relation}@{self.principal}"
 
     @classmethod
-    def parse(cls, raw: str) -> "Tuple_":
+    def parse(cls, raw: str) -> Tuple_:
         obj_part, _, subj_part = raw.partition("@")
         obj_raw, _, rel = obj_part.partition("#")
         if not rel or not subj_part:

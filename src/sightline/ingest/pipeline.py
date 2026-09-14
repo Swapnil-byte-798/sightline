@@ -69,16 +69,16 @@ from sightline.store.base import VectorStore
 from sightline.types import Chunk, ObjectRef, Relation
 
 __all__ = [
-    "SourceDocument",
+    "Checkpoint",
     "IngestConfig",
     "IngestReport",
-    "Checkpoint",
     "ProgressReporter",
-    "run_ingest",
-    "ingest_messages",
-    "reindex_object",
+    "SourceDocument",
     "documents_from_messages",
+    "ingest_messages",
     "main",
+    "reindex_object",
+    "run_ingest",
 ]
 
 

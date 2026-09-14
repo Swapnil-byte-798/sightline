@@ -38,3 +38,10 @@ target-version = "py311"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff.lint]
+# Correctness and hygiene, not style pedantry. The wider RUF/ISC/SIM families
+# flagged 15 cosmetic issues that would make CI noisy without making the code
+# safer; they are worth a pass later, not a red build now.
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]

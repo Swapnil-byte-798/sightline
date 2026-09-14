@@ -54,20 +54,20 @@ from typing import Protocol, runtime_checkable
 from sightline.types import ObjectRef, PrincipalRef, Relation, Tuple_
 
 __all__ = [
-    "This",
+    "DEFAULT_NAMESPACES",
     "ComputedUserset",
+    "MemoryTupleStore",
+    "NamespaceConfig",
+    "Rewrite",
+    "SQLiteTupleStore",
+    "This",
+    "TupleStore",
+    "TupleStoreStats",
     "TupleToUserset",
     "Union",
-    "Rewrite",
-    "NamespaceConfig",
-    "DEFAULT_NAMESPACES",
-    "TupleStoreStats",
-    "TupleStore",
-    "MemoryTupleStore",
-    "SQLiteTupleStore",
     "parse_tuples",
-    "rewrite_to_json",
     "rewrite_from_json",
+    "rewrite_to_json",
 ]
 
 
@@ -129,7 +129,7 @@ class TupleToUserset:
 class Union:
     """Satisfied if any child is. The only combinator in v1."""
 
-    children: tuple["Rewrite", ...]
+    children: tuple[Rewrite, ...]
 
 
 Rewrite = This | ComputedUserset | TupleToUserset | Union
@@ -202,7 +202,7 @@ class NamespaceConfig:
         return json.dumps({"name": self.name, "relations": relations}, sort_keys=True)
 
     @classmethod
-    def from_json(cls, raw: str) -> "NamespaceConfig":
+    def from_json(cls, raw: str) -> NamespaceConfig:
         blob = json.loads(raw)
         return cls(blob["name"], {r: rewrite_from_json(v) for r, v in blob["relations"].items()})
 

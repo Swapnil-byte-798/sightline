@@ -38,8 +38,9 @@ from __future__ import annotations
 import re
 import time
 import uuid
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterator, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -68,15 +69,15 @@ from sightline.types import (
 )
 
 __all__ = [
-    "Diagnostics",
-    "QueryResult",
-    "SearchResult",
-    "PipelineEvent",
-    "Guardrails",
-    "BuiltinGuardrails",
-    "default_guardrails",
-    "Retriever",
     "INJECTION_PATTERNS",
+    "BuiltinGuardrails",
+    "Diagnostics",
+    "Guardrails",
+    "PipelineEvent",
+    "QueryResult",
+    "Retriever",
+    "SearchResult",
+    "default_guardrails",
 ]
 
 
@@ -368,7 +369,7 @@ class Retriever:
         """
         try:
             return self.tuple_store.epoch()
-        except Exception as exc:  # noqa: BLE001 - any store failure is the same failure
+        except Exception as exc:
             raise AuthorityUnavailable(f"policy epoch unreadable: {exc}") from exc
 
     def plan_for(self, principal: PrincipalRef) -> tuple[FilterPlan, str, int]:
@@ -736,7 +737,7 @@ class Retriever:
                     k=k,
                     returned=len(unchecked),
                 )
-        except Exception as exc:  # noqa: BLE001 - any backend failure refuses
+        except Exception as exc:
             raise IndexUnavailable(f"search failed: {type(exc).__name__}") from exc
         elapsed = time.perf_counter() - started
         obs.stage_seconds.observe(elapsed, stage="search")
@@ -915,7 +916,7 @@ class Retriever:
         )
         try:
             row = self.audit.append(record)
-        except Exception:  # noqa: BLE001 - sink failures are a deployment concern
+        except Exception:
             obs.audit_appends_total.inc(outcome="error")
             if self.settings.audit.required:
                 raise

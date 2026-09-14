@@ -26,29 +26,29 @@ a tight loop".
 from __future__ import annotations
 
 __all__ = [
-    "SightlineError",
-    "ConfigError",
-    "MissingExtra",
-    "require_extra",
-    "AuthError",
-    "MissingCredentials",
-    "InvalidToken",
-    "TokenExpired",
-    "UnknownSigningKey",
-    "JwksUnavailable",
-    "PermissionDenied",
-    "StalePolicy",
-    "BudgetExceeded",
-    "AuthorityUnavailable",
-    "IndexUnavailable",
-    "GenerationError",
-    "ProviderError",
-    "ProviderTimeout",
-    "ProviderBudgetExhausted",
-    "CircuitOpen",
     "AllProvidersFailed",
     "AuditChainBroken",
     "AuditUnavailable",
+    "AuthError",
+    "AuthorityUnavailable",
+    "BudgetExceeded",
+    "CircuitOpen",
+    "ConfigError",
+    "GenerationError",
+    "IndexUnavailable",
+    "InvalidToken",
+    "JwksUnavailable",
+    "MissingCredentials",
+    "MissingExtra",
+    "PermissionDenied",
+    "ProviderBudgetExhausted",
+    "ProviderError",
+    "ProviderTimeout",
+    "SightlineError",
+    "StalePolicy",
+    "TokenExpired",
+    "UnknownSigningKey",
+    "require_extra",
 ]
 
 
@@ -140,7 +140,7 @@ def require_extra(module: str, extra: str, *, purpose: str = "") -> object:
 
     try:
         return importlib.import_module(module)
-    except ImportError as exc:  # noqa: PERF203 - the message is the point
+    except ImportError as exc:
         raise MissingExtra(module, extra, purpose=purpose) from exc
 
 

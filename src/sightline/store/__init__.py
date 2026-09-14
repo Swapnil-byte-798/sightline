@@ -38,22 +38,22 @@ from sightline.store.memory import (
 )
 
 __all__ = [
+    "STORE_NAMES",
+    "FaissOracleStore",
     "Hit",
-    "UncheckedHit",
-    "StoreStats",
-    "VectorStore",
-    "Rechecker",
     "MemoryVectorStore",
+    "PgVectorStore",
     "PostFilterStore",
     "QdrantVectorStore",
-    "PgVectorStore",
-    "FaissOracleStore",
-    "build_oracle",
+    "Rechecker",
+    "StoreStats",
+    "UncheckedHit",
+    "VectorStore",
     "admits",
-    "plan_bindings",
+    "build_oracle",
     "first_matching_token",
     "get_store",
-    "STORE_NAMES",
+    "plan_bindings",
 ]
 
 #: Canonical name -> ``(module, attribute)``. Resolved lazily by :func:`get_store`.

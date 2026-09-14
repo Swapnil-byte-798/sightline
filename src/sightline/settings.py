@@ -26,22 +26,22 @@ those are what a developer already has exported.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass, replace
-from typing import Mapping
 
 from sightline.errors import ConfigError
 
 __all__ = [
-    "Secret",
-    "AuthSettings",
-    "StoreSettings",
-    "RetrievalSettings",
-    "GenerationSettings",
-    "AuditSettings",
-    "ObsSettings",
-    "Settings",
-    "load_settings",
     "GROQ_DAILY_TOKEN_BUDGET",
+    "AuditSettings",
+    "AuthSettings",
+    "GenerationSettings",
+    "ObsSettings",
+    "RetrievalSettings",
+    "Secret",
+    "Settings",
+    "StoreSettings",
+    "load_settings",
 ]
 
 #: Groq's free tier binds on **tokens per day**, not on request count. Budgeting
@@ -179,7 +179,7 @@ class AuthSettings:
     admin_relation: str = "admin"
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str]) -> "AuthSettings":
+    def from_env(cls, env: Mapping[str, str]) -> AuthSettings:
         return cls(
             jwks_url=_s(env, "SIGHTLINE_JWKS_URL"),
             issuer=_s(env, "SIGHTLINE_JWT_ISSUER"),
@@ -211,7 +211,7 @@ class StoreSettings:
     embedder: str = "auto"
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str]) -> "StoreSettings":
+    def from_env(cls, env: Mapping[str, str]) -> StoreSettings:
         return cls(
             vector_backend=_s(env, "SIGHTLINE_VECTOR_BACKEND", "memory"),
             vector_url=_s(env, "SIGHTLINE_VECTOR_URL"),
@@ -248,7 +248,7 @@ class RetrievalSettings:
     recompile_on_stale: bool = True
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str]) -> "RetrievalSettings":
+    def from_env(cls, env: Mapping[str, str]) -> RetrievalSettings:
         return cls(
             default_k=_i(env, "SIGHTLINE_DEFAULT_K", 10, minimum=1),
             max_k=_i(env, "SIGHTLINE_MAX_K", 50, minimum=1),
@@ -297,7 +297,7 @@ class GenerationSettings:
     budget_state_path: str = ""
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str]) -> "GenerationSettings":
+    def from_env(cls, env: Mapping[str, str]) -> GenerationSettings:
         budgets = {
             "groq": _i(env, "SIGHTLINE_GROQ_DAILY_TOKENS", GROQ_DAILY_TOKEN_BUDGET, minimum=0),
             "gemini": _i(env, "SIGHTLINE_GEMINI_DAILY_TOKENS", 1_000_000, minimum=0),
@@ -351,7 +351,7 @@ class AuditSettings:
     max_page: int = 500
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str]) -> "AuditSettings":
+    def from_env(cls, env: Mapping[str, str]) -> AuditSettings:
         return cls(
             path=_s(env, "SIGHTLINE_AUDIT_PATH"),
             required=_b(env, "SIGHTLINE_AUDIT_REQUIRED", True),
@@ -373,7 +373,7 @@ class ObsSettings:
     otlp_endpoint: str = ""
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str]) -> "ObsSettings":
+    def from_env(cls, env: Mapping[str, str]) -> ObsSettings:
         return cls(
             service_name=_s(env, "SIGHTLINE_SERVICE_NAME", "sightline"),
             traces_enabled=_b(env, "SIGHTLINE_TRACES", True),
@@ -507,7 +507,7 @@ class Settings:
             out.add("github")
         return out
 
-    def with_(self, **changes: object) -> "Settings":
+    def with_(self, **changes: object) -> Settings:
         """``dataclasses.replace`` under a name that reads in a test."""
         return replace(self, **changes)  # type: ignore[arg-type]
 

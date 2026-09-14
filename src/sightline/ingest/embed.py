@@ -47,19 +47,19 @@ import numpy as np
 
 __all__ = [
     "EMBED_DIM",
+    "HASH_EMBEDDER_WARNING",
     "MODEL_ID",
     "MODEL_MAX_TOKENS",
-    "HASH_EMBEDDER_WARNING",
+    "REQUIRED_MODEL_FILES",
     "Embedder",
+    "EmbeddingStats",
     "HashEmbedder",
     "OnnxEmbedder",
-    "EmbeddingStats",
     "VectorCache",
+    "download_model",
     "embed_all",
     "load_embedder",
     "model_dir",
-    "download_model",
-    "REQUIRED_MODEL_FILES",
 ]
 
 #: all-MiniLM-L6-v2 output width. Every store in this repo is built around it.
@@ -439,7 +439,7 @@ class VectorCache:
 
     @staticmethod
     def key(embedder_name: str, dim: int, text: str) -> str:
-        payload = f"{embedder_name}\x00{dim}\x00{text}".encode("utf-8")
+        payload = f"{embedder_name}\x00{dim}\x00{text}".encode()
         return hashlib.blake2b(payload, digest_size=16).hexdigest()
 
     def __len__(self) -> int:

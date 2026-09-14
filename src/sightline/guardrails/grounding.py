@@ -74,22 +74,22 @@ from sightline.store.base import Hit
 from sightline.types import Answer, Citation, ObjectRef, PlanStrategy, RefusalReason
 
 __all__ = [
+    "EXISTENCE_PROTECTED_REASON",
+    "EXISTENCE_PROTECTED_TEXT",
+    "MIN_SUPPORT",
+    "REFUSAL_FLOOR_SECONDS",
+    "REFUSAL_TEXT",
     "Claim",
     "ClaimVerdict",
     "GroundingResult",
-    "MIN_SUPPORT",
-    "EXISTENCE_PROTECTED_TEXT",
-    "EXISTENCE_PROTECTED_REASON",
-    "REFUSAL_FLOOR_SECONDS",
-    "REFUSAL_TEXT",
-    "support_score",
-    "citations_for",
-    "reconstruct",
-    "enforce",
     "build_answer",
+    "citations_for",
+    "enforce",
+    "existence_floor",
+    "reconstruct",
     "refuse",
     "refuse_no_evidence",
-    "existence_floor",
+    "support_score",
 ]
 
 
@@ -165,11 +165,7 @@ MIN_SUPPORT = 0.45
 # Words carrying no evidential weight. Short list on purpose: a long stopword
 # list starts deleting the words that decide meaning ("not", "except", "only").
 _STOPWORDS = frozenset(
-    """
-    a an and are as at be been by for from had has have in into is it its of on
-    or that the their there these they this to was were what when where which
-    who will with your you our we
-    """.split()
+    ["a", "an", "and", "are", "as", "at", "be", "been", "by", "for", "from", "had", "has", "have", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "their", "there", "these", "they", "this", "to", "was", "were", "what", "when", "where", "which", "who", "will", "with", "your", "you", "our", "we"]
 )
 
 _WORD = re.compile(r"[\w£$€%.,/-]+")

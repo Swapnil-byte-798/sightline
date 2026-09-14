@@ -79,24 +79,24 @@ from pathlib import Path
 from sightline.types import ObjectRef, PrincipalRef, Tuple_
 
 __all__ = [
-    "TARGET_CHUNKS",
     "DEFAULT_MAX_MESSAGES",
     "MIN_GROUP_SIZE",
     "MIN_GROUP_SUPPORT",
+    "TARGET_CHUNKS",
     "VIEWER",
-    "EnronMessage",
     "AclDerivation",
     "DerivationConfig",
-    "normalise_address",
-    "principal_for_address",
+    "EnronMessage",
+    "dedupe_messages",
+    "derive_acl",
+    "document_text",
     "is_distribution_list",
-    "iter_maildir",
     "iter_enronqa",
     "iter_enronqa_questions",
-    "dedupe_messages",
-    "document_text",
+    "iter_maildir",
+    "normalise_address",
+    "principal_for_address",
     "quote_boundaries",
-    "derive_acl",
     "sample_messages",
 ]
 
@@ -340,7 +340,7 @@ def _parse_rfc822(raw: str, *, mailbox: str, path: str) -> EnronMessage | None:
         # No Message-ID: fall back to content addressing so the same message
         # found in two mailboxes still deduplicates.
         mid = "sha:" + hashlib.blake2b(
-            f"{sender}|{msg.get('Date', '')}|{body}".encode("utf-8"), digest_size=16
+            f"{sender}|{msg.get('Date', '')}|{body}".encode(), digest_size=16
         ).hexdigest()
     return EnronMessage(
         message_id=mid,

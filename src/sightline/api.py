@@ -34,7 +34,8 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Annotated, Any, Iterator, Literal
+from collections.abc import Iterator
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -59,7 +60,7 @@ from sightline.retrieve import PipelineEvent, QueryResult, Retriever, SearchResu
 from sightline.settings import Settings, load_settings
 from sightline.types import ObjectRef, PrincipalRef
 
-__all__ = ["create_app", "build_retriever", "app"]
+__all__ = ["app", "build_retriever", "create_app"]
 
 API_VERSION = "1"
 

@@ -31,7 +31,8 @@ truth.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 
@@ -40,11 +41,11 @@ from sightline.store.memory import MemoryVectorStore, first_matching_token, norm
 from sightline.types import Chunk, FilterPlan
 
 __all__ = [
+    "NEVER_SERVE",
+    "ORACLE_EXTRA_HINT",
     "FaissOracleStore",
     "build_oracle",
     "faiss_available",
-    "NEVER_SERVE",
-    "ORACLE_EXTRA_HINT",
 ]
 
 #: Read by the test that asserts the serving API cannot reach this module.

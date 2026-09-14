@@ -25,12 +25,13 @@ is simply missed until reindex — an availability cost, deliberately chosen.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from sightline.types import Chunk, FilterPlan
 
-__all__ = ["UncheckedHit", "Hit", "StoreStats", "VectorStore", "Rechecker"]
+__all__ = ["Hit", "Rechecker", "StoreStats", "UncheckedHit", "VectorStore"]
 
 
 @dataclass(frozen=True, slots=True)

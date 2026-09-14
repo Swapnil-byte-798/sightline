@@ -48,19 +48,20 @@ and transaction scope is the only correct choice.
 from __future__ import annotations
 
 import json
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from sightline.store.base import StoreStats, UncheckedHit
 from sightline.store.memory import first_matching_token, normalise, plan_bindings
 from sightline.types import Chunk, FilterPlan, PlanStrategy
 
 __all__ = [
-    "PgVectorStore",
-    "SCHEMA_DDL",
-    "WILDCARD_TOKEN",
-    "POSTGRES_EXTRA_HINT",
     "APP_ROLE",
     "INGEST_ROLE",
+    "POSTGRES_EXTRA_HINT",
+    "SCHEMA_DDL",
+    "WILDCARD_TOKEN",
+    "PgVectorStore",
 ]
 
 POSTGRES_EXTRA_HINT = (

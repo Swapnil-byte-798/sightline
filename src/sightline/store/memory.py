@@ -36,7 +36,7 @@ this system is built not to do.
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 
@@ -45,11 +45,11 @@ from sightline.types import Chunk, FilterPlan, GrantToken, PlanStrategy
 
 __all__ = [
     "MemoryVectorStore",
-    "plan_bindings",
     "admits",
     "first_matching_token",
     "normalise",
     "normalise_batch",
+    "plan_bindings",
 ]
 
 #: Bits per word in the grant-token bitset. uint64 because numpy's bitwise ops on

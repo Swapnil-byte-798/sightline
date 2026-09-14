@@ -52,12 +52,14 @@ import hmac
 import json
 import threading
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import httpx
 
 from sightline.errors import (
+    ConfigError,
     InvalidToken,
     JwksUnavailable,
     MissingCredentials,
@@ -68,13 +70,13 @@ from sightline.settings import AuthSettings
 from sightline.types import PrincipalRef
 
 __all__ = [
-    "TokenClaims",
-    "JwksCache",
-    "TokenVerifier",
-    "principal_from_claims",
-    "mint_dev_token",
     "HAVE_JOSE",
     "SUPPORTED_ALGORITHMS",
+    "JwksCache",
+    "TokenClaims",
+    "TokenVerifier",
+    "mint_dev_token",
+    "principal_from_claims",
 ]
 
 try:  # pragma: no cover - depends on install shape
@@ -366,12 +368,13 @@ class TokenVerifier:
             raise InvalidToken("asymmetric token has no 'kid'; key rotation needs one")
         key = self.jwks.key_for(kid)
         if not HAVE_JOSE:  # pragma: no cover - core-deps CI job
-            from sightline.errors import MissingExtra
-
-            raise MissingExtra(
-                "jose",
-                "",
-                purpose=f"verifying {alg} signatures; install python-jose[cryptography]",
+            # Not a MissingExtra: python-jose is a *core* dependency, so this is
+            # a broken install rather than a feature somebody chose not to buy.
+            # The message says which, because "install the extra" would send the
+            # reader looking for an extra that does not exist.
+            raise ConfigError(
+                f"python-jose is not installed, so {alg} signatures cannot be verified. "
+                'It is a core dependency: pip install "python-jose[cryptography]"'
             )
         try:  # pragma: no cover - requires the crypto stack
             _jose_jws.verify(token, key, algorithms=[alg])

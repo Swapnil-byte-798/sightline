@@ -40,19 +40,19 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Sequence
 
 from sightline.store.base import StoreStats, UncheckedHit, VectorStore
 from sightline.store.memory import MemoryVectorStore, admits, first_matching_token
 from sightline.types import Chunk, FilterPlan, PlanStrategy
 
 __all__ = [
+    "ALLOW_ENV_VAR",
+    "NOT_FOR_PRODUCTION",
     "PostFilterStore",
     "PostFilterTrace",
     "assert_not_serving",
-    "NOT_FOR_PRODUCTION",
-    "ALLOW_ENV_VAR",
 ]
 
 #: Read by the docs build and by a test that asserts this module is labelled.

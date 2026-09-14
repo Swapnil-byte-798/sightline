@@ -82,23 +82,23 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 __all__ = [
-    "PiiKind",
-    "PiiMatch",
-    "Redaction",
-    "Detector",
-    "RegexDetector",
-    "PresidioDetector",
-    "load_detector",
-    "detect",
-    "redact",
-    "redact_for_ingest",
-    "redact_for_egress",
-    "redact_for_log",
-    "redact_chunks",
-    "CompositeDetector",
-    "INGEST_KINDS",
     "EGRESS_KINDS",
     "FINGERPRINT_SALT_ENV",
+    "INGEST_KINDS",
+    "CompositeDetector",
+    "Detector",
+    "PiiKind",
+    "PiiMatch",
+    "PresidioDetector",
+    "Redaction",
+    "RegexDetector",
+    "detect",
+    "load_detector",
+    "redact",
+    "redact_chunks",
+    "redact_for_egress",
+    "redact_for_ingest",
+    "redact_for_log",
 ]
 
 

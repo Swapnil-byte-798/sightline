@@ -70,12 +70,13 @@ import random
 import statistics
 import sys
 import time
-from collections.abc import Sequence
-from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
 
 import eval  # noqa: F401  - path bootstrap; see eval/__init__.py
-import numpy as np
 from sightline.authz.compile import (
     DEFAULT_NAMESPACE,
     DEFAULT_RELATION,
@@ -86,23 +87,23 @@ from sightline.authz.compile import (
 )
 from sightline.authz.tuples import MemoryTupleStore, TupleStore
 from sightline.ingest.embed import EMBED_DIM, HashEmbedder
-from sightline.store.base import UncheckedHit, VectorStore
+from sightline.store.base import UncheckedHit
 from sightline.store.memory import MemoryVectorStore
 from sightline.types import Chunk, FilterPlan, ObjectRef, PlanStrategy, PrincipalRef
 
 __all__ = [
+    "ARMS",
     "DENSITIES",
     "RECALL_FLOOR",
-    "ARMS",
-    "CorpusSpec",
-    "Corpus",
     "ArmResult",
+    "Corpus",
+    "CorpusSpec",
     "DensityResult",
     "SelectivityReport",
     "build_corpus",
-    "run_selectivity",
-    "render_markdown",
     "main",
+    "render_markdown",
+    "run_selectivity",
 ]
 
 #: The permission densities the FRD names. Fractions of the corpus a principal
@@ -287,6 +288,19 @@ def _visible_count(store: TupleStore, principal: PrincipalRef) -> int:
 
 
 def _permitted_ids(store: TupleStore, principal: PrincipalRef) -> frozenset[str]:
+    """Every document id the principal may read, spelled ``namespace:id``.
+
+    ``reachable_objects`` returns bare ids. A store asked to resolve a bare id
+    has to scan its whole object posting map, because ``"42"`` legally admits
+    ``doc:42`` and ``folder:42`` alike — see ``_id_condition_holds`` in
+    ``store/memory.py``, which accepts the bare form and says outright that plan
+    compilers should not emit it. Namespacing here turns the enumerated arm's
+    candidate resolution from a scan of every object into a dict lookup per id,
+    which on a 4,000-document corpus is the difference between four seconds and
+    four milliseconds. The result set is identical either way; only the cost
+    column moves, and a cost column measuring an id-spelling artefact would be a
+    lie about the strategy.
+    """
     ids, truncated = reachable_objects(
         store,
         principal_closure(store, principal),
@@ -299,7 +313,7 @@ def _permitted_ids(store: TupleStore, principal: PrincipalRef) -> frozenset[str]
             "measured against a partial id set without quietly reporting a "
             "recall loss as a strategy difference"
         )
-    return ids
+    return frozenset(f"{DEFAULT_NAMESPACE}:{i}" for i in ids)
 
 
 # --------------------------------------------------------------------------

@@ -45,27 +45,28 @@ import os
 import re
 import threading
 import time
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from sightline.errors import AuditChainBroken, AuditUnavailable
 
 __all__ = [
     "GENESIS_DIGEST",
+    "REDACTIONS",
     "AuditRecord",
     "AuditRow",
-    "ChainVerification",
     "AuditSink",
-    "MemoryAuditLog",
+    "ChainVerification",
     "JsonlAuditLog",
+    "MemoryAuditLog",
     "canonical_json",
     "chain_digest",
-    "verify_chain",
     "hash_query",
     "redact",
     "redact_for_egress",
-    "REDACTIONS",
+    "verify_chain",
 ]
 
 #: The zero digest the first row commits to. Not an empty string: an empty
@@ -110,7 +111,7 @@ def _card(match: re.Match[str]) -> str:
 REDACTIONS: tuple[tuple[str, re.Pattern[str], Any], ...] = (
     (
         "private_key",
-        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL),
         "[REDACTED:PRIVATE_KEY]",
     ),
     ("aws_key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED:AWS_KEY]"),
@@ -295,7 +296,7 @@ class AuditRecord:
             "degraded": self.degraded,
         }
 
-    def redacted(self) -> "AuditRecord":
+    def redacted(self) -> AuditRecord:
         """Apply redaction before the row is written.
 
         Object references and principals are identifiers, not free text, but an
@@ -330,7 +331,7 @@ class AuditRow:
         )
 
     @classmethod
-    def from_json(cls, line: str) -> "AuditRow":
+    def from_json(cls, line: str) -> AuditRow:
         blob = json.loads(line)
         return cls(
             seq=int(blob["seq"]),
